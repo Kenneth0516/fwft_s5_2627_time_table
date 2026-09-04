@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <title>TWGHs Mrs. Fung Wong Fung Ting College Timetable</title>
+    <style>
+        /* 基礎設定 */
+        body { font-family: "Times New Roman", Times, serif; padding: 20px; background-color: #fff; color: #000; margin: 0; }
+        
+        /* 控制面板 (網頁顯示專用) */
+        .controls { background: #f4f4f9; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-family: "Arial", sans-serif; }
+        .controls label { margin-right: 15px; font-weight: bold; display: inline-block; margin-bottom: 5px; font-size: 13px; }
+        select { padding: 2px; }
+        .btn-group { margin-top: 15px; display: flex; gap: 10px; }
+        button { padding: 8px 15px; cursor: pointer; border: none; border-radius: 4px; font-weight: bold; color: white; }
+        .btn-generate { background-color: #007bff; }
+        .btn-generate:hover { background-color: #0056b3; }
+        .btn-print { background-color: #28a745; }
+        .btn-print:hover { background-color: #218838; }
+
+        /* 防止網頁版因為嚴格比例而變形嘅橫向捲軸 */
+        .table-scroll-wrapper { width: 100%; overflow-x: auto; margin-bottom: 20px; }
+        
+        /* 標題區塊 */
+        .header-container { margin-bottom: 5px; min-width: 1225px; } 
+        .school-name { text-align: center; font-weight: bold; font-size: 16px; margin-bottom: 3px; }
+        .sub-header-row { display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 14px; }
+        .sub-header-row .class-name, .sub-header-row .room-name { width: 50px; }
+        .sub-header-row .academic-year { flex-grow: 1; text-align: center; }
+        .sub-header-row .room-name { text-align: right; }
+
+        /* 核心表格樣式 */
+        table { border-collapse: collapse; table-layout: fixed; width: max-content; }
+        th, td { border: 1px solid #000; text-align: center; vertical-align: middle; padding: 0; overflow: hidden; }
+        
+        /* =========================================
+           【網頁預覽版】黃金比例 225:40 絕對鎖定
+           ========================================= */
+        th.time-col, th.day-col { font-weight: bold; }
+        
+        .time-col { width: 100px; height: 40px; font-size: 13px; line-height: 1.1; }
+        .day-col { width: 225px; height: 40px; font-size: 14px; }
+        .class-row td, .merged-row, .tfoot-row td { height: 40px; }
+
+        /* ！！！根據要求：主時間粗體，括號時間普通字體！！！ */
+        .time-main { font-weight: bold; font-size: 13px; display: block; line-height: 1; }
+        .time-sub { font-weight: normal; font-size: 11px; display: block; line-height: 1; }
+        
+        /* 小息 Lunch 保持普通字體 */
+        .merged-row { font-size: 13px; font-weight: normal; }
+        
+        /* ！！！根據要求：底部 Footer 變回粗體！！！ */
+        .tfoot-row td { font-weight: bold; font-size: 13px; text-align: left; padding-left: 5px; }
+
+        /* 儲存格內排版 (科目與老師保持普通字體) */
+        .cell-container { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; height: 100%; width: 100%; padding: 2px 4px; box-sizing: border-box; font-size: 12px; font-weight: normal; }
+        .subject { grid-column: 1 / 2; text-align: left; }
+        .room { grid-column: 2 / 3; text-align: right; }
+        .teacher { grid-column: 1 / 3; text-align: right; align-self: end; }
+        .cell-single { text-align: left; padding: 2px 4px; box-sizing: border-box; font-size: 12px; line-height: 1.1; display: flex; align-items: flex-start; font-weight: normal; }
+
+        /* 螢幕顯示時隱藏第二份 */
+        @media screen {
+            #instance-2 { display: none; }
+        }
+
+        /* =========================================
+           【A4 列印版】精準毫米轉換保持 225:40
+           (33.75mm / 6mm = 5.625 = 225/40)
+           ========================================= */
+        @media print {
+            @page { 
+                size: A4 portrait;
+                margin: 10mm;
+            }
+            body { padding: 0; margin: 0; -webkit-print-color-adjust: exact; }
+            .controls { display: none !important; }
+            
+            .table-scroll-wrapper { overflow-x: visible !important; margin-bottom: 0 !important; }
+            .header-container { min-width: auto !important; }
+
+            /* 取消強制分頁，確保兩份完美塞入一頁 */
+            #instance-1, #instance-2 { page-break-inside: avoid; }
+            
+            #instance-2 { 
+                display: block !important; 
+                border-top: 1px dashed #999; 
+                padding-top: 6mm; 
+                margin-top: 6mm;
+            }
+
+            .school-name { font-size: 14px; margin-bottom: 2px; }
+            .sub-header-row { font-size: 12px; margin-bottom: 2px; }
+            
+            /* 鎖死列印高度與闊度 (絕對 225:40 比例) */
+            .time-col { width: 15mm !important; height: 6mm !important; font-size: 10.5px !important; }
+            .day-col { width: 33.75mm !important; height: 6mm !important; font-size: 11.5px !important; }
+            .class-row td, .merged-row, .tfoot-row td { height: 6mm !important; }
+            
+            .merged-row { font-size: 12px !important; }
+            .tfoot-row td { font-size: 11.5px !important; }
+            
+            .cell-container, .cell-single { font-size: 10px !important; padding: 0px 2px !important; line-height: 1.1 !important; }
+            .time-main { font-size: 10.5px !important; }
+            .time-sub { font-size: 8.5px !important; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <label>班別 (Class): 
+            <select id="sel-class" onchange="generateTimetable()">
+                <option value="5A|301">5A</option>
+                <option value="5B|302">5B</option>
+                <option value="5C|303">5C</option>
+                <option value="5D|304" selected>5D</option>
+            </select>
+        </label><br>
+
+        <label>選修一 (5X1): <select id="sel-5x1"><option value="">--請選擇--</option><option value="Geo(e)">Geo(e)</option><option value="Bio">Bio</option><option value="Econ">Econ</option><option value="THS">THS</option><option value="ICT">ICT</option></select></label>
+        <label>選修二 (5X2): <select id="sel-5x2"><option value="">--請選擇--</option><option value="Geo">Geo</option><option value="His">His</option><option value="Phy">Phy</option><option value="Econ(e)">Econ(e)</option><option value="Clit">Clit</option></select></label>
+        <label>選修三 (5X3): <select id="sel-5x3"><option value="">--請選擇--</option><option value="Chis">Chis</option><option value="Chem">Chem</option><option value="HMSC">HMSC</option><option value="BAFS">BAFS</option><option value="M2">M2</option><option value="VA">VA</option></select></label><br>
+        <label>中文 (5Gx): <select id="sel-chi"><option value="">--請選擇--</option><option value="5G1">5G1</option><option value="5G2">5G2</option><option value="5G3">5G3</option><option value="5G4">5G4</option><option value="5G5">5G5</option></select></label>
+        <label>英文 (5GpX): <select id="sel-eng"><option value="">--請選擇--</option><option value="5Gp1">5Gp1</option><option value="5Gp2">5Gp2</option><option value="5Gp3">5Gp3</option><option value="5Gp4">5Gp4</option><option value="5Gp5">5Gp5</option></select></label>
+        <label>數學 (5CrX): <select id="sel-math"><option value="">--請選擇--</option><option value="5Cr1">5Cr1</option><option value="5Cr2">5Cr2</option><option value="5Cr3">5Cr3</option><option value="5Cr4">5Cr4</option><option value="5Cr5">5Cr5</option></select></label><br>
+        <label>體育 (5PEX): <select id="sel-pe"><option value="">--請選擇--</option><option value="5PE1">5PE1</option><option value="5PE2">5PE2</option><option value="5PE3">5PE3</option><option value="5PE4">5PE4</option></select></label>
+        <label>公社 (5csdX): <select id="sel-csd"><option value="">--請選擇--</option><option value="5csd1">5csd1</option><option value="5csd2">5csd2</option><option value="5csd3">5csd3</option><option value="5csd4">5csd4</option></select></label>
+        
+        <label>上表姓名 (可選): <input type="text" id="student-name-1" placeholder="例如: Kenneth" style="padding: 2px; width: 90px;"></label>
+        <label>下表姓名 (可選): <input type="text" id="student-name-2" placeholder="例如: Johnny" style="padding: 2px; width: 90px;"></label>
+        
+        <div class="btn-group">
+            <button class="btn-generate" onclick="generateTimetable()">更新時間表預覽</button>
+            <button class="btn-print" onclick="printPDF()">輸出 PDF (A4 上下兩份)</button>
+        </div>
+    </div>
+
+    <!-- 第一份時間表 -->
+    <div id="instance-1">
+        <div class="table-scroll-wrapper">
+            <div class="header-container">
+                <div class="school-name">TWGHs Mrs. Fung Wong Fung Ting College</div>
+                <div class="sub-header-row">
+                    <span class="class-name" id="display-class-1">5D</span>
+                    <span class="academic-year">2026 - 2027 Class Timetable</span>
+                    <span class="room-name" id="display-room-1">304</span>
+                </div>
+            </div>
+            <table id="table-1">
+                <thead>
+                    <tr>
+                        <th class="time-col">Day<br>Time</th>
+                        <th class="day-col">Monday</th><th class="day-col">Tuesday</th><th class="day-col">Wednesday</th><th class="day-col">Thursday</th><th class="day-col">Friday</th>
+                    </tr>
+                </thead>
+                <tbody id="tb-body-1"></tbody>
+                <tfoot>
+                    <tr class="tfoot-row">
+                        <td id="tf-pe-1">PE:</td>
+                        <td id="tf-eng-1">Eng:</td>
+                        <td id="tf-chi-1">Chi:</td>
+                        <td id="tf-csd-1">CSD:</td>
+                        <td id="tf-math-1">Maths:</td>
+                        <td id="tf-for-1">For</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- 第二份時間表 -->
+    <div id="instance-2">
+        <div class="table-scroll-wrapper">
+            <div class="header-container">
+                <div class="school-name">TWGHs Mrs. Fung Wong Fung Ting College</div>
+                <div class="sub-header-row">
+                    <span class="class-name" id="display-class-2">5D</span>
+                    <span class="academic-year">2026 - 2027 Class Timetable</span>
+                    <span class="room-name" id="display-room-2">304</span>
+                </div>
+            </div>
+            <table id="table-2">
+                <thead>
+                    <tr>
+                        <th class="time-col">Day<br>Time</th>
+                        <th class="day-col">Monday</th><th class="day-col">Tuesday</th><th class="day-col">Wednesday</th><th class="day-col">Thursday</th><th class="day-col">Friday</th>
+                    </tr>
+                </thead>
+                <tbody id="tb-body-2"></tbody>
+                <tfoot>
+                    <tr class="tfoot-row">
+                        <td id="tf-pe-2">PE:</td>
+                        <td id="tf-eng-2">Eng:</td>
+                        <td id="tf-chi-2">Chi:</td>
+                        <td id="tf-csd-2">CSD:</td>
+                        <td id="tf-math-2">Maths:</td>
+                        <td id="tf-for-2">For</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const DB = {
+            "5X1": {
+                "Geo(e)": { sub: "Geo(e)", room: { tue: "303", wed: "PSHE", fri: "PSHE" }, teacher: "YL Lau" },
+                "Bio": { sub: "Bio", room: { tue: "BL", wed: "BL", fri: "BL" }, teacher: "MT Mak" },
+                "Econ": { sub: "Econ", room: "304", teacher: "CT Tsang" },
+                "THS": { sub: "THS", room: "302", teacher: "SK Cheung" },
+                "ICT": { sub: "ICT", room: { tue: "201", wed: "CR", fri: "CR" }, teacher: "FY Hung" }
+            },
+            "5X2": {
+                "Geo": { sub: "Geo", room: { mon: "PSHE", wed: "PSHE", fri: "301" }, teacher: "YK Yuen" },
+                "His": { sub: "His", room: "304", teacher: "PY Lam" },
+                "Phy": { sub: "Phy", room: "PL", teacher: "SH Yeung" },
+                "Econ(e)": { sub: "Econ(e)", room: "303", teacher: "YM Ng" },
+                "Clit": { sub: "Clit", room: "302", teacher: "WM Wong" }
+            },
+            "5X3": {
+                "Chis": { sub: "Chis", room: "303", teacher: "NH Chiu" },
+                "Chem": { sub: "Chem", room: "CL", teacher: "TH Cheng" },
+                "HMSC": { sub: "HMSC", room: "HRC", teacher: "MT Mak" },
+                "BAFS": { sub: "BAFS", room: "301", teacher: "NM Tse" },
+                "M2": { sub: "M2", room: { mon: "304", tue: "201", thu: "304" }, teacher: "FY Hung" },
+                "VA": { sub: "VA", room: "VA", teacher: "CY Yip" }
+            },
+            "Math": {
+                "5Cr1": { sub: "Mathematics", room: "304", teacher: "KY Ho" },
+                "5Cr2": { sub: "Mathematics", room: "301", teacher: "KL Chan" },
+                "5Cr3": { sub: "Mathematics", room: "302", teacher: "YW Choy" },
+                "5Cr4": { sub: "Mathematics", room: "303", teacher: "YW Wong" },
+                "5Cr5": { sub: "Mathematics", room: { mon: "R13", tue: "R11", thu: "401B", fri: "R14" }, teacher: "SY Hui" }
+            },
+            "Eng": {
+                "5Gp1": { sub: "English", room: "303", teacher: "WK Chan" },
+                "5Gp2": { sub: "English", room: "304", teacher: "SY Leung" },
+                "5Gp3": { sub: "English", room: { mon: "302", tue: "401B", wed: "R19", thu: "302" }, teacher: "L Tsoi" },
+                "5Gp4": { sub: "English", room: "302", teacher: "HW Choi" },
+                "5Gp5": { sub: "English", room: "301", teacher: "YL Wong" }
+            },
+            "Chi": {
+                "5G1": { sub: "Chinese", room: "301", teacher: "K Cheng" },
+                "5G2": { sub: "Chinese", room: "302", teacher: "YF Suen" },
+                "5G3": { sub: "Chinese", room: "303", teacher: "HK Wong" },
+                "5G4": { sub: "Chinese", room: "304", teacher: "CC Lam" },
+                "5G5": { sub: "Chinese", room: { tue: "401B", wed: "R22", thu: "R12", fri: "401B" }, teacher: "SY Ho" }
+            },
+            "CSD": { "5csd1": { sub: "C&SD", room: "303", teacher: "WS Li" }, "5csd2": { sub: "C&SD", room: { mon: "401B", thu: "R16" }, teacher: "CT Tsang" }, "5csd3": { sub: "C&SD", room: "401B", teacher: "WS Li" }, "5csd4": { sub: "C&SD", room: "PSHE", teacher: "CT Tsang" } },
+            "PE": { "5PE1": { sub: "PE", room: "PE", teacher: "P Ng/C Lau" }, "5PE2": { sub: "PE", room: "PE", teacher: "P Ng/WT Ting" } },
+            
+            "Mix_Eng13_CSD34": { 
+                "Eng_5Gp1": { sub: "English", room: "303", teacher: "WK Chan" }, "Eng_5Gp3": { sub: "English", room: "302", teacher: "L Tsoi" }, 
+                "CSD_5csd3": { sub: "C&SD", room: "401B", teacher: "WS Li" }, "CSD_5csd4": { sub: "C&SD", room: "PSHE", teacher: "CT Tsang" } 
+            },
+            "Mix_CSD12_Eng245": { 
+                "CSD_5csd1": { sub: "C&SD", room: "303", teacher: "WS Li" }, "CSD_5csd2": { sub: "C&SD", room: { mon: "401B", thu: "R16" }, teacher: "CT Tsang" }, 
+                "Eng_5Gp2": { sub: "English", room: "304", teacher: "SY Leung" }, "Eng_5Gp4": { sub: "English", room: "302", teacher: "HW Choi" }, "Eng_5Gp5": { sub: "English", room: "301", teacher: "YL Wong" }
+            },
+            
+            "Mix_PE2_Chi23": {
+                "PE_5PE2": { sub: "PE", room: "PE", teacher: "P Ng/WT Ting" },
+                "Chi_5G2": { sub: "Chinese", room: "302", teacher: "YF Suen" },
+                "Chi_5G3": { sub: "Chinese", room: "303", teacher: "HK Wong" }
+            },
+            "Mix_PE1_Chi145": {
+                "PE_5PE1": { sub: "PE", room: "PE", teacher: "P Ng/C Lau" },
+                "Chi_5G1": { sub: "Chinese", room: "301", teacher: "K Cheng" },
+                "Chi_5G4": { sub: "Chinese", room: "304", teacher: "CC Lam" },
+                "Chi_5G5": { sub: "Chinese", room: "401B", teacher: "SY Ho" }
+            },
+
+            "FormPeriod": { sub: "Form Period", room: "", teacher: "" },
+            "ClassPeriod": { sub: "Class Period", room: "", teacher: "" },
+            "ClassPeriodWed": { sub: "Class Period<br>(15:25-16:00)", room: "", teacher: "" }
+        };
+
+        const skeleton = [
+            { mainTime: "8:10 - 8:30", subTime: "(8:10 - 8:20)", type: "fixed", text: "Morning Assembly" },
+            { mainTime: "8:30 - 9:05", subTime: "(8:20 - 8:50)", type: "class", mon: "5X2", tue: "5X3", wed: "5X2", thu: "Mix_Eng13_CSD34", fri: "Mix_PE2_Chi23" },
+            { mainTime: "9:05 - 9:40", subTime: "(8:50 - 9:20)", type: "class", mon: "5X2", tue: "5X3", wed: "5X2", thu: "Mix_Eng13_CSD34", fri: "Mix_PE2_Chi23" },
+            { mainTime: "9:40 - 10:00", subTime: "(9:20 - 9:30)", type: "fixed", text: "1st Recess" },
+            { mainTime: "10:00 - 10:35", subTime: "(9:30 - 10:00)", type: "class", mon: "5X3", tue: "5X1", wed: "Chi", thu: "5X3", fri: "Mix_PE1_Chi145" },
+            { mainTime: "10:35 - 11:10", subTime: "(10:00 - 10:30)", type: "class", mon: "5X3", tue: "5X1", wed: "Chi", thu: "5X3", fri: "Mix_PE1_Chi145" },
+            { mainTime: "11:10 - 11:20", subTime: "(10:30 - 10:40)", type: "fixed", text: "2nd Recess" },
+            { mainTime: "11:20 - 11:55", subTime: "(10:40 - 11:10)", type: "class", mon: "Math", tue: "Eng", wed: "5X1", thu: "Math", fri: "5X1" },
+            { mainTime: "11:55 - 12:30", subTime: "(11:10 - 11:40)", type: "class", mon: "Math", tue: "Eng", wed: "5X1", thu: "Math", fri: "5X1" },
+            { mainTime: "12:30 - 13:35", subTime: "(11:40 - 11:50)", type: "fixed", text: "Lunch" },
+            { mainTime: "13:35 - 13:40", subTime: "", type: "fixed", text: "Roll-call" },
+            { mainTime: "13:40 - 14:15", subTime: "(11:50 - 12:20)", type: "class", mon: "Mix_Eng13_CSD34", tue: "Math", wed: "Eng", thu: "Mix_CSD12_Eng245", fri: "5X2" },
+            { mainTime: "14:15 - 14:50", subTime: "(12:20 - 12:50)", type: "class", mon: "Mix_CSD12_Eng245", tue: "Math", wed: "Eng", thu: "Chi", fri: "5X2" },
+            { mainTime: "14:50 - 15:25", subTime: "(12:50 - 13:20)", type: "class", mon: "Mix_CSD12_Eng245", tue: "Chi", wed: "FormPeriod", thu: "Chi", fri: "Math" },
+            { mainTime: "15:25 - 15:35", subTime: "", type: "class", mon: "ClassPeriod", tue: "ClassPeriod", wed: "ClassPeriodWed", thu: "ClassPeriod", fri: "ClassPeriod" }
+        ];
+
+        function renderTable(tableNum, studentNameInputId) {
+            const classRoomVal = document.getElementById('sel-class').value;
+            if (classRoomVal) {
+                const [className, roomName] = classRoomVal.split('|');
+                document.getElementById('display-class-' + tableNum).innerText = className;
+                document.getElementById('display-room-' + tableNum).innerText = roomName;
+            }
+
+            const userChoices = {
+                "5X1": document.getElementById('sel-5x1').value,
+                "5X2": document.getElementById('sel-5x2').value,
+                "5X3": document.getElementById('sel-5x3').value,
+                "Eng": document.getElementById('sel-eng').value,
+                "Math": document.getElementById('sel-math').value,
+                "Chi": document.getElementById('sel-chi').value,
+                "PE": document.getElementById('sel-pe').value,
+                "CSD": document.getElementById('sel-csd').value
+            };
+            
+            document.getElementById('tf-pe-' + tableNum).innerText = "PE: " + (userChoices["PE"] || "");
+            document.getElementById('tf-eng-' + tableNum).innerText = "Eng: " + (userChoices["Eng"] || "");
+            document.getElementById('tf-chi-' + tableNum).innerText = "Chi: " + (userChoices["Chi"] || "");
+            document.getElementById('tf-csd-' + tableNum).innerText = "CSD: " + (userChoices["CSD"] || "");
+            document.getElementById('tf-math-' + tableNum).innerText = "Maths: " + (userChoices["Math"] || "");
+            
+            const studentName = document.getElementById(studentNameInputId).value;
+            document.getElementById('tf-for-' + tableNum).innerText = "For " + (studentName || "");
+
+            userChoices["Mix_Eng13_CSD34"] = (userChoices["Eng"] === "5Gp1" || userChoices["Eng"] === "5Gp3") ? "Eng_" + userChoices["Eng"] : (userChoices["CSD"] === "5csd3" || userChoices["CSD"] === "5csd4") ? "CSD_" + userChoices["CSD"] : null;
+            userChoices["Mix_CSD12_Eng245"] = (userChoices["CSD"] === "5csd1" || userChoices["CSD"] === "5csd2") ? "CSD_" + userChoices["CSD"] : (userChoices["Eng"] === "5Gp2" || userChoices["Eng"] === "5Gp4" || userChoices["Eng"] === "5Gp5") ? "Eng_" + userChoices["Eng"] : null;
+            userChoices["Mix_PE2_Chi23"] = (userChoices["PE"] === "5PE2") ? "PE_5PE2" : (userChoices["Chi"] === "5G2" || userChoices["Chi"] === "5G3") ? "Chi_" + userChoices["Chi"] : null;
+            userChoices["Mix_PE1_Chi145"] = (userChoices["PE"] === "5PE1") ? "PE_5PE1" : (userChoices["Chi"] === "5G1" || userChoices["Chi"] === "5G4" || userChoices["Chi"] === "5G5") ? "Chi_" + userChoices["Chi"] : null;
+
+            const tbody = document.getElementById('tb-body-' + tableNum);
+            tbody.innerHTML = ''; 
+
+            skeleton.forEach(row => {
+                let tr = document.createElement('tr');
+                if(row.type === 'class') tr.className = 'class-row';
+                
+                let tdTime = document.createElement('td');
+                tdTime.className = 'time-col';
+                tdTime.innerHTML = `<span class="time-main">${row.mainTime}</span>` + (row.subTime ? `<span class="time-sub">${row.subTime}</span>` : "");
+                tr.appendChild(tdTime);
+
+                if (row.type === 'fixed') {
+                    let tdMerge = document.createElement('td');
+                    tdMerge.colSpan = 5;
+                    tdMerge.className = 'merged-row';
+                    tdMerge.innerHTML = row.text;
+                    tr.appendChild(tdMerge);
+                } else {
+                    ['mon', 'tue', 'wed', 'thu', 'fri'].forEach(day => {
+                        let td = document.createElement('td');
+                        td.className = 'day-col';
+                        let blockName = row[day];
+
+                        if (!blockName) {
+                            td.innerHTML = ""; 
+                        } else {
+                            let info = null;
+                            if (userChoices[blockName] && DB[blockName] && DB[blockName][userChoices[blockName]]) {
+                                info = DB[blockName][userChoices[blockName]];
+                            } else if (DB[blockName] && DB[blockName].sub) {
+                                info = DB[blockName];
+                            }
+
+                            if (info) {
+                                let roomStr = typeof info.room === 'object' ? (info.room[day] || "") : (info.room || "");
+                                
+                                if (!roomStr && !info.teacher) {
+                                    td.innerHTML = `<div class="cell-single">${info.sub}</div>`;
+                                } else {
+                                    td.innerHTML = `<div class="cell-container"><div class="subject">${info.sub}</div><div class="room">${roomStr}</div><div class="teacher">${info.teacher}</div></div>`;
+                                }
+                            }
+                        }
+                        tr.appendChild(td);
+                    });
+                }
+                tbody.appendChild(tr);
+            });
+        }
+
+        function generateTimetable() {
+            renderTable(1, 'student-name-1');
+            renderTable(2, 'student-name-2');
+        }
+
+        function printPDF() {
+            generateTimetable(); 
+            window.print();
+        }
+
+        window.onload = generateTimetable;
+    </script>
+</body>
+</html>
